@@ -1,56 +1,49 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import LogoutButton from '../../components/LogoutButton';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../utils/api';
 import {
-  getDashboardStats,
-  getStudents,
-  createStudent,
-  updateStudent,
-  deleteStudent,
-  setStudentActive,
-  resetStudentPassword,
-  getExams,
-  createExam,
-  updateExam,
-  deleteExam,
-  publishExam,
-  getQuestions,
-  createQuestion,
-  updateQuestion,
-  deleteQuestion,
+  getDashboardStats, getStudents, createStudent, updateStudent,
+  deleteStudent, setStudentActive, resetStudentPassword,
+  getExams, createExam, updateExam, deleteExam, publishExam,
+  getQuestions, createQuestion, updateQuestion, deleteQuestion,
   getResults
 } from '../../services/adminService';
 
-const tabButtonStyle = (active) => ({
-  padding: '10px 18px',
-  border: 'none',
-  borderBottom: active ? '3px solid #007bff' : '3px solid transparent',
-  backgroundColor: 'transparent',
-  cursor: 'pointer',
-  fontWeight: active ? '700' : '500'
-});
+const NAV = [
+  { id: 'Dashboard',  icon: '🏠' },
+  { id: 'Students',   icon: '👨‍🎓' },
+  { id: 'Exams',      icon: '📝' },
+  { id: 'Questions',  icon: '❓' },
+  { id: 'Results',    icon: '📊' },
+  { id: 'AI Interview', icon: '🤖', isAI: true },
+  { id: 'Profile',    icon: '👤' },
+];
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('Dashboard');
   const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [results, setResults] = useState([]);
+  const [interviewSessions, setInterviewSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [studentForm, setStudentForm] = useState({ name: '', email: '', password: '', roll: '', department: '', active: true });
-  const [examForm, setExamForm] = useState({ title: '', subject: '', durationMinutes: 30, totalMarks: 100, startTime: '', endTime: '', published: false });
-  const [questionForm, setQuestionForm] = useState({ questionTitle: '', option1: '', option2: '', option3: '', option4: '', correctAnswer: '', examId: '' });
-  const [editingStudent, setEditingStudent] = useState(null);
-  const [editingExam, setEditingExam] = useState(null);
-  const [editingQuestion, setEditingQuestion] = useState(null);
-  const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '', newPassword: '' });
   const [statusMessage, setStatusMessage] = useState('');
   const [resultSearch, setResultSearch] = useState('');
   const [resultExamId, setResultExamId] = useState('');
+
+  // Forms
+  const [studentForm, setStudentForm] = useState({ name: '', email: '', password: '', roll: '', department: '', active: true });
+  const [examForm, setExamForm] = useState({ title: '', subject: '', durationMinutes: 30, totalMarks: 100, startTime: '', endTime: '', published: false });
+  const [questionForm, setQuestionForm] = useState({ questionTitle: '', option1: '', option2: '', option3: '', option4: '', correctAnswer: '', examId: '' });
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '', newPassword: '' });
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editingExam, setEditingExam] = useState(null);
+  const [editingQuestion, setEditingQuestion] = useState(null);
 
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
@@ -58,576 +51,384 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
         const [statsData, studentData, examData, questionData, resultData] = await Promise.all([
-          getDashboardStats(),
-          getStudents(),
-          getExams(),
-          getQuestions(),
-          getResults('', null)
+          getDashboardStats(), getStudents(), getExams(), getQuestions(), getResults('', null)
         ]);
         setStats(statsData);
         setStudents(studentData);
         setExams(examData);
         setQuestions(questionData);
         setResults(resultData);
-      } catch (err) {
-        setError('Unable to load admin dashboard');
-      } finally {
-        setLoading(false);
-      }
+      } catch { setError('Unable to load admin dashboard'); }
+      finally { setLoading(false); }
     };
     fetchData();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    setProfileForm((prev) => ({ ...prev, name: user.name || '', email: user.email || '' }));
+    setProfileForm(p => ({ ...p, name: user.name || '', email: user.email || '' }));
   }, [user]);
+
+  // Load interview sessions when tab opens
+  useEffect(() => {
+    if (tab !== 'AI Interview') return;
+    apiClient.get('/interview/admin/all').then(res => setInterviewSessions(res.data || [])).catch(() => {});
+  }, [tab]);
 
   const reloadData = async () => {
     try {
       setLoading(true);
-      const [statsData, studentData, examData, questionData] = await Promise.all([
-        getDashboardStats(),
-        getStudents(),
-        getExams(),
-        getQuestions()
-      ]);
-      setStats(statsData);
-      setStudents(studentData);
-      setExams(examData);
-      setQuestions(questionData);
+      const [s, st, ex, q] = await Promise.all([getDashboardStats(), getStudents(), getExams(), getQuestions()]);
+      setStats(s); setStudents(st); setExams(ex); setQuestions(q);
       await reloadResults();
-    } catch (err) {
-      setError('Unable to refresh data');
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError('Unable to refresh'); } finally { setLoading(false); }
   };
-
   const reloadResults = async () => {
-    try {
-      const resultData = await getResults(resultSearch, resultExamId || null);
-      setResults(resultData);
-    } catch {
-      setError('Unable to load results');
-    }
+    try { setResults(await getResults(resultSearch, resultExamId || null)); }
+    catch { setError('Unable to load results'); }
   };
 
-  const handleStudentChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setStudentForm({ ...studentForm, [name]: type === 'checkbox' ? checked : value });
-  };
+  // Handlers
+  const handleStudentChange = e => { const { name, value, type, checked } = e.target; setStudentForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value })); };
+  const handleExamChange = e => { const { name, value, type, checked } = e.target; setExamForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value })); };
+  const handleQuestionChange = e => { const { name, value } = e.target; setQuestionForm(f => ({ ...f, [name]: value })); };
+  const handleProfileChange = e => { const { name, value } = e.target; setProfileForm(f => ({ ...f, [name]: value })); };
 
-  const handleExamChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setExamForm({ ...examForm, [name]: type === 'checkbox' ? checked : value });
-  };
+  const notify = (msg) => { setStatusMessage(msg); setTimeout(() => setStatusMessage(''), 4000); };
 
-  const handleQuestionChange = (e) => {
-    const { name, value } = e.target;
-    setQuestionForm({ ...questionForm, [name]: value });
-  };
-
-  const handleProfileChange = (e) => {
-    const { name, value } = e.target;
-    setProfileForm({ ...profileForm, [name]: value });
-  };
-
-  const submitStudent = async (e) => {
+  const submitStudent = async e => {
     e.preventDefault();
     try {
-      if (editingStudent) {
-        await updateStudent(editingStudent.id, studentForm);
-        setStatusMessage('Student updated.');
-      } else {
-        await createStudent(studentForm);
-        setStatusMessage('Student created.');
-      }
+      if (editingStudent) { await updateStudent(editingStudent.id, studentForm); notify('Student updated.'); }
+      else { await createStudent(studentForm); notify('Student created.'); }
       setStudentForm({ name: '', email: '', password: '', roll: '', department: '', active: true });
-      setEditingStudent(null);
-      await reloadData();
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Student save failed');
-    }
+      setEditingStudent(null); await reloadData();
+    } catch (err) { setError(err.response?.data?.message || 'Student save failed'); }
   };
-
-  const submitExam = async (e) => {
+  const submitExam = async e => {
     e.preventDefault();
     try {
-      const payload = {
-        ...examForm,
-        durationMinutes: Number(examForm.durationMinutes),
-        totalMarks: Number(examForm.totalMarks)
-      };
-      if (editingExam) {
-        await updateExam(editingExam.id, payload);
-        setStatusMessage('Exam updated.');
-      } else {
-        await createExam(payload);
-        setStatusMessage('Exam created.');
-      }
+      const payload = { ...examForm, durationMinutes: Number(examForm.durationMinutes), totalMarks: Number(examForm.totalMarks) };
+      if (editingExam) { await updateExam(editingExam.id, payload); notify('Exam updated.'); }
+      else { await createExam(payload); notify('Exam created.'); }
       setExamForm({ title: '', subject: '', durationMinutes: 30, totalMarks: 100, startTime: '', endTime: '', published: false });
-      setEditingExam(null);
-      await reloadData();
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Exam save failed');
-    }
+      setEditingExam(null); await reloadData();
+    } catch (err) { setError(err.response?.data?.message || 'Exam save failed'); }
   };
-
-  const submitQuestion = async (e) => {
+  const submitQuestion = async e => {
     e.preventDefault();
     try {
-      const payload = {
-        ...questionForm,
-        examId: questionForm.examId ? Number(questionForm.examId) : null
-      };
-      if (editingQuestion) {
-        await updateQuestion(editingQuestion.id, payload);
-        setStatusMessage('Question updated.');
-      } else {
-        await createQuestion(payload);
-        setStatusMessage('Question created.');
-      }
+      const payload = { ...questionForm, examId: questionForm.examId ? Number(questionForm.examId) : null };
+      if (editingQuestion) { await updateQuestion(editingQuestion.id, payload); notify('Question updated.'); }
+      else { await createQuestion(payload); notify('Question created.'); }
       setQuestionForm({ questionTitle: '', option1: '', option2: '', option3: '', option4: '', correctAnswer: '', examId: '' });
-      setEditingQuestion(null);
-      await reloadData();
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Question save failed');
-    }
+      setEditingQuestion(null); await reloadData();
+    } catch (err) { setError(err.response?.data?.message || 'Question save failed'); }
   };
-
-  const submitProfile = async (e) => {
+  const submitProfile = async e => {
     e.preventDefault();
-    try {
-      await apiClient.put(`/user/profile?userId=${user.userId}`, profileForm);
-      setStatusMessage('Profile updated successfully.');
-      setProfileForm({ ...profileForm, password: '', newPassword: '' });
-    } catch {
-      setError('Profile update failed.');
-    }
+    try { await apiClient.put(`/user/profile?userId=${user.userId}`, profileForm); notify('Profile updated.'); setProfileForm(f => ({ ...f, password: '', newPassword: '' })); }
+    catch { setError('Profile update failed.'); }
   };
 
-  const exportResultsCsv = () => {
+  const startEditingStudent = s => { setEditingStudent(s); setStudentForm({ name: s.name || '', email: s.email || '', password: '', roll: s.roll || '', department: s.department || '', active: s.active }); };
+  const startEditingExam = ex => { setEditingExam(ex); setExamForm({ title: ex.title || '', subject: ex.subject || '', durationMinutes: ex.durationMinutes || 30, totalMarks: ex.totalMarks || 100, startTime: ex.startTime ? ex.startTime.replace('Z', '') : '', endTime: ex.endTime ? ex.endTime.replace('Z', '') : '', published: ex.published || false }); };
+  const startEditingQuestion = q => { setEditingQuestion(q); setQuestionForm({ questionTitle: q.questionTitle || '', option1: q.option1 || '', option2: q.option2 || '', option3: q.option3 || '', option4: q.option4 || '', correctAnswer: q.correctAnswer || '', examId: q.exam?.id || '' }); };
+
+  const handleDeleteStudent = async id => { try { await deleteStudent(id); notify('Student deleted.'); await reloadData(); } catch { setError('Delete failed.'); } };
+  const handleToggleActive = async (id, active) => { try { await setStudentActive(id, active); notify(active ? 'Activated.' : 'Deactivated.'); await reloadData(); } catch { setError('Update failed.'); } };
+  const handleResetPwd = async (id) => { const pw = prompt('New password:'); if (pw) { try { await resetStudentPassword(id, pw); notify('Password reset.'); } catch { setError('Reset failed.'); } } };
+  const handleDeleteExam = async id => { try { await deleteExam(id); notify('Exam deleted.'); await reloadData(); } catch { setError('Delete failed.'); } };
+  const handleTogglePublish = async (id, p) => { try { await publishExam(id, p); notify(p ? 'Published.' : 'Unpublished.'); await reloadData(); } catch { setError('Update failed.'); } };
+  const handleDeleteQuestion = async id => { try { await deleteQuestion(id); notify('Question deleted.'); await reloadData(); } catch { setError('Delete failed.'); } };
+
+  const exportCsv = () => {
     if (!results.length) return;
-    const header = ['Student Name', 'Email', 'Exam', 'Score', 'Total Questions', 'Percentage'];
-    const rows = results.map(row => [
-      row.studentName,
-      row.studentEmail,
-      row.examTitle,
-      row.score,
-      row.totalQuestions,
-      row.percentage.toFixed(2)
-    ]);
-    const csvContent = [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'results.csv';
-    link.click();
+    const h = ['Student Name', 'Email', 'Exam', 'Score', 'Total', 'Percentage'];
+    const rows = results.map(r => [r.studentName, r.studentEmail, r.examTitle, r.score, r.totalQuestions, r.percentage.toFixed(2)]);
+    const csv = [h, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'results.csv'; a.click();
   };
 
-  const startEditingStudent = (student) => {
-    setEditingStudent(student);
-    setStudentForm({
-      name: student.name || '',
-      email: student.email || '',
-      password: '',
-      roll: student.roll || '',
-      department: student.department || '',
-      active: student.active
-    });
-  };
+  if (!user) return <div style={{ padding: '40px' }}>Please log in.</div>;
+  if (user.role !== 'admin') return <div style={{ padding: '40px' }}>Access denied.</div>;
 
-  const startEditingExam = (exam) => {
-    setEditingExam(exam);
-    setExamForm({
-      title: exam.title || '',
-      subject: exam.subject || '',
-      durationMinutes: exam.durationMinutes || 30,
-      totalMarks: exam.totalMarks || 100,
-      startTime: exam.startTime ? exam.startTime.replace('Z', '') : '',
-      endTime: exam.endTime ? exam.endTime.replace('Z', '') : '',
-      published: exam.published || false
-    });
-  };
-
-  const startEditingQuestion = (question) => {
-    setEditingQuestion(question);
-    setQuestionForm({
-      questionTitle: question.questionTitle || '',
-      option1: question.option1 || '',
-      option2: question.option2 || '',
-      option3: question.option3 || '',
-      option4: question.option4 || '',
-      correctAnswer: question.correctAnswer || '',
-      examId: question.exam?.id || ''
-    });
-  };
-
-  const handleDeleteStudent = async (studentId) => {
-    try {
-      await deleteStudent(studentId);
-      setStatusMessage('Student deleted.');
-      await reloadData();
-    } catch {
-      setError('Failed to delete student.');
-    }
-  };
-
-  const handleToggleStudentActive = async (studentId, active) => {
-    try {
-      await setStudentActive(studentId, active);
-      setStatusMessage(active ? 'Student activated.' : 'Student deactivated.');
-      await reloadData();
-    } catch {
-      setError('Unable to update student active status.');
-    }
-  };
-
-  const handleResetStudentPassword = async (studentId, password) => {
-    try {
-      await resetStudentPassword(studentId, password);
-      setStatusMessage('Student password reset successfully.');
-    } catch {
-      setError('Unable to reset password.');
-    }
-  };
-
-  const handleDeleteExam = async (examId) => {
-    try {
-      await deleteExam(examId);
-      setStatusMessage('Exam deleted.');
-      await reloadData();
-    } catch {
-      setError('Failed to delete exam.');
-    }
-  };
-
-  const handleTogglePublishExam = async (examId, published) => {
-    try {
-      await publishExam(examId, published);
-      setStatusMessage(published ? 'Exam published.' : 'Exam unpublished.');
-      await reloadData();
-    } catch {
-      setError('Unable to update exam publish state.');
-    }
-  };
-
-  const handleDeleteQuestion = async (questionId) => {
-    try {
-      await deleteQuestion(questionId);
-      setStatusMessage('Question deleted.');
-      await reloadData();
-    } catch {
-      setError('Failed to delete question.');
-    }
-  };
-
-  if (!user) {
-    return <div>Please log in as admin.</div>;
-  }
-
-  if (user.role !== 'admin') {
-    return <div style={{ padding: '20px' }}>Access denied. Admin role required.</div>;
-  }
+  // ── shared input style ──
+  const inp = { width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', background: '#f8fafc', outline: 'none' };
+  const formCard = { background: '#fff', borderRadius: '14px', padding: '24px', boxShadow: '0 2px 12px rgba(15,23,42,0.06)' };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f4f7fb' }}>
-      <aside style={{ width: '250px', backgroundColor: '#fff', padding: '20px', boxShadow: '2px 0 10px rgba(0,0,0,0.05)' }}>
-        <h2>Admin Menu</h2>
-        {['Dashboard', 'Students', 'Exams', 'Questions', 'Results', 'Profile'].map(item => (
-          <button key={item} style={{ ...tabButtonStyle(item === tab), width: '100%', textAlign: 'left', marginBottom: '6px' }} onClick={() => setTab(item)}>
-            {item}
+    <div className="layout-sidebar">
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-brand">🎓 Exam<span>Pro</span></div>
+        <nav className="sidebar-nav">
+          {NAV.map(item => (
+            <button
+              key={item.id}
+              className={`sidebar-btn${tab === item.id ? ' active' : ''}${item.isAI ? ' ai-btn' : ''}`}
+              onClick={() => setTab(item.id)}
+            >
+              <span>{item.icon}</span> {item.id}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-user">
+          <div style={{ fontWeight: '600', color: '#e2e8f0', marginBottom: '2px' }}>{user.email}</div>
+          <div style={{ fontSize: '12px', marginBottom: '12px' }}>Administrator</div>
+          <button className="btn btn-danger" style={{ width: '100%', padding: '9px' }} onClick={async () => { await logout(); navigate('/login'); }}>
+            🚪 Logout
           </button>
-        ))}
-        <div style={{ marginTop: '24px' }}>
-          <LogoutButton />
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: '30px 40px' }}>
-        <header style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1>Admin Dashboard</h1>
-            <p style={{ color: '#555' }}>Manage students, exams, questions, and results from one place.</p>
-          </div>
-          <div style={{ color: '#666' }}>
-            Signed in as <strong>{user.email}</strong>
-          </div>
-        </header>
+      {/* Main */}
+      <main className="main-content">
+        {statusMessage && <div className="alert alert-success">{statusMessage}</div>}
+        {error && <div className="alert alert-error" onClick={() => setError('')}>{error} <span style={{ float: 'right', cursor: 'pointer' }}>✕</span></div>}
+        {loading && <div style={{ textAlign: 'center', padding: '60px' }}><div className="spinner" /></div>}
 
-        {statusMessage && <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', backgroundColor: '#e6ffed', color: '#1a7f37' }}>{statusMessage}</div>}
-        {error && <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', backgroundColor: '#ffe6e6', color: '#a10202' }}>{error}</div>}
-
-        {loading && <p>Loading admin dashboard...</p>}
-
+        {/* ── DASHBOARD ── */}
         {!loading && tab === 'Dashboard' && (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '16px', marginBottom: '30px' }}>
+          <div className="fade-in">
+            <div className="page-header">
+              <h1>Admin Dashboard 🏠</h1>
+              <p>Overview of your platform stats and activity.</p>
+            </div>
+            <div className="stats-grid">
               {[
-                { label: 'Total Students', value: stats?.totalStudents },
-                { label: 'Total Exams', value: stats?.totalExams },
-                { label: 'Total Questions', value: stats?.totalQuestions },
-                { label: 'Active Exams', value: stats?.activeExams },
-                { label: 'Completed Exams', value: stats?.completedExams }
-              ].map(card => (
-                <div key={card.label} style={{ padding: '22px', borderRadius: '14px', backgroundColor: '#fff', boxShadow: '0 4px 18px rgba(15,23,42,0.06)' }}>
-                  <p style={{ margin: 0, color: '#888' }}>{card.label}</p>
-                  <h2 style={{ margin: '12px 0 0', fontSize: '28px' }}>{card.value ?? 0}</h2>
+                { icon: '👨‍🎓', label: 'Total Students',  value: stats?.totalStudents ?? 0 },
+                { icon: '📝', label: 'Total Exams',      value: stats?.totalExams ?? 0 },
+                { icon: '❓', label: 'Total Questions',   value: stats?.totalQuestions ?? 0 },
+                { icon: '✅', label: 'Active Exams',      value: stats?.activeExams ?? 0 },
+                { icon: '🏁', label: 'Completed Exams',  value: stats?.completedExams ?? 0 },
+              ].map(c => (
+                <div key={c.label} className="stat-card">
+                  <div className="stat-icon">{c.icon}</div>
+                  <div className="stat-label">{c.label}</div>
+                  <div className="stat-value">{c.value}</div>
                 </div>
               ))}
             </div>
-            <section style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.06)' }}>
-              <h2>Recent activity</h2>
-              <p>Use the tabs on the left to manage students, exams, questions, results and profile settings.</p>
-            </section>
+            <div className="card">
+              <h3 style={{ margin: '0 0 12px' }}>Quick Actions</h3>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                {[['Students','👨‍🎓'],['Exams','📝'],['Questions','❓'],['Results','📊'],['AI Interview','🤖']].map(([t,icon]) => (
+                  <button key={t} className={`btn ${t === 'AI Interview' ? 'btn-ai' : 'btn-outline'}`} onClick={() => setTab(t)}>
+                    {icon} {t}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
+        {/* ── STUDENTS ── */}
         {!loading && tab === 'Students' && (
-          <div>
-            <h2>Student Management</h2>
-            <div style={{ display: 'flex', gap: '24px', marginTop: '20px' }}>
-              <div style={{ flex: 1, backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-                <h3>{editingStudent ? 'Edit Student' : 'Add Student'}</h3>
+          <div className="fade-in">
+            <div className="page-header"><h1>Student Management 👨‍🎓</h1><p>Add, edit, and manage student accounts.</p></div>
+            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+              <div style={{ ...formCard, width: '320px', flexShrink: 0 }}>
+                <h3 style={{ margin: '0 0 18px' }}>{editingStudent ? 'Edit Student' : 'Add Student'}</h3>
                 <form onSubmit={submitStudent}>
-                  {['name', 'email', 'roll', 'department'].map(field => (
-                    <div key={field} style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', marginBottom: '6px' }}>{field.charAt(0).toUpperCase() + field.slice(1)}:</label>
-                      <input name={field} value={studentForm[field]} onChange={handleStudentChange} required={field !== 'roll' && field !== 'department'} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }} />
+                  {['name','email','roll','department'].map(f => (
+                    <div className="form-group" key={f}>
+                      <label className="form-label">{f === 'roll' ? 'Roll No.' : f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                      <input className="form-input" name={f} value={studentForm[f]} onChange={handleStudentChange} required={f === 'name' || f === 'email'} />
                     </div>
                   ))}
                   {!editingStudent && (
-                    <div style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', marginBottom: '6px' }}>Password:</label>
-                      <input name="password" type="password" value={studentForm.password} onChange={handleStudentChange} required style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }} />
+                    <div className="form-group">
+                      <label className="form-label">Password</label>
+                      <input className="form-input" name="password" type="password" value={studentForm.password} onChange={handleStudentChange} required />
                     </div>
                   )}
-                  <div style={{ marginBottom: '14px' }}>
-                    <label>
-                      <input type="checkbox" name="active" checked={studentForm.active} onChange={handleStudentChange} style={{ marginRight: '10px' }} />
-                      Active account
-                    </label>
-                  </div>
-                  <button type="submit" style={{ width: '100%', padding: '12px', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', fontSize: '14px' }}>
+                    <input type="checkbox" name="active" checked={studentForm.active} onChange={handleStudentChange} style={{ accentColor: '#4f46e5' }} />
+                    Active account
+                  </label>
+                  <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>
                     {editingStudent ? 'Save Changes' : 'Create Student'}
                   </button>
+                  {editingStudent && <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }} onClick={() => { setEditingStudent(null); setStudentForm({ name:'',email:'',password:'',roll:'',department:'',active:true }); }}>Cancel</button>}
                 </form>
               </div>
-
-              <div style={{ flex: 2, backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-                <h3>Student List</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f5f7fb' }}>
-                      {['Name', 'Email', 'Roll', 'Department', 'Status', 'Actions'].map(header => (
-                        <th key={header} style={{ padding: '12px 10px', textAlign: 'left', color: '#444' }}>{header}</th>
+              <div style={{ flex: 1, ...formCard }}>
+                <h3 style={{ margin: '0 0 18px' }}>All Students ({students.length})</h3>
+                <div className="table-wrap" style={{ boxShadow: 'none' }}>
+                  <table className="data-table">
+                    <thead><tr><th>Name</th><th>Email</th><th>Roll</th><th>Dept</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {students.map(s => (
+                        <tr key={s.id}>
+                          <td style={{ fontWeight: '600' }}>{s.name}</td>
+                          <td>{s.email}</td>
+                          <td>{s.roll || '-'}</td>
+                          <td>{s.department || '-'}</td>
+                          <td><span className={`badge ${s.active ? 'badge-green' : 'badge-red'}`}>{s.active ? 'Active' : 'Inactive'}</span></td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingStudent(s)}>Edit</button>
+                              <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDeleteStudent(s.id)}>Delete</button>
+                              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleToggleActive(s.id, !s.active)}>{s.active ? 'Deactivate' : 'Activate'}</button>
+                              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleResetPwd(s.id)}>Reset Pwd</button>
+                            </div>
+                          </td>
+                        </tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {students.map(student => (
-                      <tr key={student.id} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '12px 10px' }}>{student.name}</td>
-                        <td style={{ padding: '12px 10px' }}>{student.email}</td>
-                        <td style={{ padding: '12px 10px' }}>{student.roll || '-'}</td>
-                        <td style={{ padding: '12px 10px' }}>{student.department || '-'}</td>
-                        <td style={{ padding: '12px 10px' }}>{student.active ? 'Active' : 'Inactive'}</td>
-                        <td style={{ padding: '12px 10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => startEditingStudent(student)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #007bff', background: 'white', color: '#007bff' }}>
-                            Edit
-                          </button>
-                          <button type="button" onClick={() => handleDeleteStudent(student.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e74c3c', background: 'white', color: '#e74c3c' }}>
-                            Delete
-                          </button>
-                          <button type="button" onClick={() => handleToggleStudentActive(student.id, !student.active)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #28a745', background: 'white', color: '#28a745' }}>
-                            {student.active ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button type="button" onClick={() => {
-                            const newPassword = prompt('Enter new password for this student:', 'Student123');
-                            if (newPassword) handleResetStudentPassword(student.id, newPassword);
-                          }} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #444', background: 'white', color: '#444' }}>
-                            Reset Password
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* ── EXAMS ── */}
         {!loading && tab === 'Exams' && (
-          <div>
-            <h2>Exam Management</h2>
-            <div style={{ display: 'flex', gap: '24px', marginTop: '20px' }}>
-              <div style={{ flex: 1, backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-                <h3>{editingExam ? 'Edit Exam' : 'Create Exam'}</h3>
+          <div className="fade-in">
+            <div className="page-header"><h1>Exam Management 📝</h1><p>Create and publish exams for students.</p></div>
+            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+              <div style={{ ...formCard, width: '320px', flexShrink: 0 }}>
+                <h3 style={{ margin: '0 0 18px' }}>{editingExam ? 'Edit Exam' : 'Create Exam'}</h3>
                 <form onSubmit={submitExam}>
-                  {['title', 'subject', 'durationMinutes', 'totalMarks', 'startTime', 'endTime'].map(field => (
-                    <div key={field} style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', marginBottom: '6px' }}>{field === 'durationMinutes' ? 'Duration (minutes)' : field === 'totalMarks' ? 'Total Marks' : field === 'startTime' ? 'Start Time' : field === 'endTime' ? 'End Time' : field.charAt(0).toUpperCase() + field.slice(1)}:</label>
-                      <input
-                        name={field}
-                        value={examForm[field]}
-                        onChange={handleExamChange}
-                        type={field.includes('Time') ? 'datetime-local' : 'text'}
-                        required={field !== 'subject'}
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}
-                      />
+                  {[['title','Title'],['subject','Subject'],['durationMinutes','Duration (min)'],['totalMarks','Total Marks']].map(([f,l]) => (
+                    <div className="form-group" key={f}>
+                      <label className="form-label">{l}</label>
+                      <input className="form-input" name={f} value={examForm[f]} onChange={handleExamChange} required={f === 'title'} />
                     </div>
                   ))}
-                  <div style={{ marginBottom: '14px' }}>
-                    <label>
-                      <input type="checkbox" name="published" checked={examForm.published} onChange={handleExamChange} style={{ marginRight: '10px' }} />
-                      Publish exam
-                    </label>
-                  </div>
-                  <button type="submit" style={{ width: '100%', padding: '12px', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '8px' }}>
-                    {editingExam ? 'Update Exam' : 'Create Exam'}
-                  </button>
+                  {[['startTime','Start Time'],['endTime','End Time']].map(([f,l]) => (
+                    <div className="form-group" key={f}>
+                      <label className="form-label">{l}</label>
+                      <input className="form-input" name={f} type="datetime-local" value={examForm[f]} onChange={handleExamChange} />
+                    </div>
+                  ))}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', fontSize: '14px' }}>
+                    <input type="checkbox" name="published" checked={examForm.published} onChange={handleExamChange} style={{ accentColor: '#4f46e5' }} />
+                    Publish immediately
+                  </label>
+                  <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>{editingExam ? 'Update Exam' : 'Create Exam'}</button>
+                  {editingExam && <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }} onClick={() => { setEditingExam(null); setExamForm({ title:'',subject:'',durationMinutes:30,totalMarks:100,startTime:'',endTime:'',published:false }); }}>Cancel</button>}
                 </form>
               </div>
-
-              <div style={{ flex: 2, backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-                <h3>Exam List</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f5f7fb' }}>
-                      {['Title', 'Subject', 'Duration', 'Marks', 'Status', 'Actions'].map(header => (
-                        <th key={header} style={{ padding: '12px 10px', textAlign: 'left', color: '#444' }}>{header}</th>
+              <div style={{ flex: 1, ...formCard }}>
+                <h3 style={{ margin: '0 0 18px' }}>All Exams ({exams.length})</h3>
+                <div className="table-wrap" style={{ boxShadow: 'none' }}>
+                  <table className="data-table">
+                    <thead><tr><th>Title</th><th>Subject</th><th>Duration</th><th>Marks</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {exams.map(ex => (
+                        <tr key={ex.id}>
+                          <td style={{ fontWeight: '600' }}>{ex.title}</td>
+                          <td>{ex.subject}</td>
+                          <td>{ex.durationMinutes} min</td>
+                          <td>{ex.totalMarks}</td>
+                          <td><span className={`badge ${ex.published ? 'badge-green' : 'badge-gray'}`}>{ex.published ? 'Published' : 'Draft'}</span></td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingExam(ex)}>Edit</button>
+                              <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDeleteExam(ex.id)}>Delete</button>
+                              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleTogglePublish(ex.id, !ex.published)}>{ex.published ? 'Unpublish' : 'Publish'}</button>
+                            </div>
+                          </td>
+                        </tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exams.map(exam => (
-                      <tr key={exam.id} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '12px 10px' }}>{exam.title}</td>
-                        <td style={{ padding: '12px 10px' }}>{exam.subject}</td>
-                        <td style={{ padding: '12px 10px' }}>{exam.durationMinutes} min</td>
-                        <td style={{ padding: '12px 10px' }}>{exam.totalMarks}</td>
-                        <td style={{ padding: '12px 10px' }}>{exam.published ? 'Published' : 'Draft'}</td>
-                        <td style={{ padding: '12px 10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => startEditingExam(exam)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #007bff', background: 'white', color: '#007bff' }}>
-                            Edit
-                          </button>
-                          <button type="button" onClick={() => handleDeleteExam(exam.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e74c3c', background: 'white', color: '#e74c3c' }}>
-                            Delete
-                          </button>
-                          <button type="button" onClick={() => handleTogglePublishExam(exam.id, !exam.published)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #28a745', background: 'white', color: '#28a745' }}>
-                            {exam.published ? 'Unpublish' : 'Publish'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* ── QUESTIONS ── */}
         {!loading && tab === 'Questions' && (
-          <div>
-            <h2>Question Management</h2>
-            <div style={{ display: 'flex', gap: '24px', marginTop: '20px' }}>
-              <div style={{ flex: 1, backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-                <h3>{editingQuestion ? 'Edit Question' : 'Add Question'}</h3>
+          <div className="fade-in">
+            <div className="page-header"><h1>Question Management ❓</h1><p>Add and manage MCQ questions for exams.</p></div>
+            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+              <div style={{ ...formCard, width: '340px', flexShrink: 0 }}>
+                <h3 style={{ margin: '0 0 18px' }}>{editingQuestion ? 'Edit Question' : 'Add Question'}</h3>
                 <form onSubmit={submitQuestion}>
-                  {['questionTitle', 'option1', 'option2', 'option3', 'option4', 'correctAnswer'].map(field => (
-                    <div key={field} style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', marginBottom: '6px' }}>{field === 'questionTitle' ? 'Question' : field.charAt(0).toUpperCase() + field.slice(1)}:</label>
-                      <input name={field} value={questionForm[field]} onChange={handleQuestionChange} required style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }} />
+                  {[['questionTitle','Question'],['option1','Option A'],['option2','Option B'],['option3','Option C'],['option4','Option D'],['correctAnswer','Correct Answer']].map(([f,l]) => (
+                    <div className="form-group" key={f}>
+                      <label className="form-label">{l}</label>
+                      <input className="form-input" name={f} value={questionForm[f]} onChange={handleQuestionChange} required />
                     </div>
                   ))}
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px' }}>Assign to Exam:</label>
-                    <select name="examId" value={questionForm.examId} onChange={handleQuestionChange} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}>
+                  <div className="form-group">
+                    <label className="form-label">Assign to Exam</label>
+                    <select className="form-select" name="examId" value={questionForm.examId} onChange={handleQuestionChange}>
                       <option value="">None</option>
-                      {exams.map(exam => (
-                        <option key={exam.id} value={exam.id}>{exam.title}</option>
-                      ))}
+                      {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
                     </select>
                   </div>
-                  <button type="submit" style={{ width: '100%', padding: '12px', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '8px' }}>
-                    {editingQuestion ? 'Update Question' : 'Add Question'}
-                  </button>
+                  <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>{editingQuestion ? 'Update' : 'Add Question'}</button>
+                  {editingQuestion && <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }} onClick={() => { setEditingQuestion(null); setQuestionForm({ questionTitle:'',option1:'',option2:'',option3:'',option4:'',correctAnswer:'',examId:'' }); }}>Cancel</button>}
                 </form>
               </div>
-
-              <div style={{ flex: 2, backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-                <h3>Question List</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f5f7fb' }}>
-                      {['Question', 'Correct', 'Exam', 'Actions'].map(header => (
-                        <th key={header} style={{ padding: '12px 10px', textAlign: 'left', color: '#444' }}>{header}</th>
+              <div style={{ flex: 1, ...formCard }}>
+                <h3 style={{ margin: '0 0 18px' }}>All Questions ({questions.length})</h3>
+                <div className="table-wrap" style={{ boxShadow: 'none' }}>
+                  <table className="data-table">
+                    <thead><tr><th>Question</th><th>Answer</th><th>Exam</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {questions.map(q => (
+                        <tr key={q.id}>
+                          <td style={{ maxWidth: '300px' }}>{q.questionTitle}</td>
+                          <td><span className="badge badge-green">{q.correctAnswer}</span></td>
+                          <td>{q.exam?.title || '-'}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingQuestion(q)}>Edit</button>
+                              <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDeleteQuestion(q.id)}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {questions.map(question => (
-                      <tr key={question.id} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '12px 10px' }}>{question.questionTitle}</td>
-                        <td style={{ padding: '12px 10px' }}>{question.correctAnswer}</td>
-                        <td style={{ padding: '12px 10px' }}>{question.exam?.title || '-'}</td>
-                        <td style={{ padding: '12px 10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => startEditingQuestion(question)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #007bff', background: 'white', color: '#007bff' }}>
-                            Edit
-                          </button>
-                          <button type="button" onClick={() => handleDeleteQuestion(question.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e74c3c', background: 'white', color: '#e74c3c' }}>
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* ── RESULTS ── */}
         {!loading && tab === 'Results' && (
-          <div>
-            <h2>Result Management</h2>
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input placeholder="Search student or exam" value={resultSearch} onChange={e => setResultSearch(e.target.value)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }} />
-              <select value={resultExamId} onChange={e => setResultExamId(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}>
-                <option value="">All exams</option>
-                {exams.map(exam => (
-                  <option key={exam.id} value={exam.id}>{exam.title}</option>
-                ))}
+          <div className="fade-in">
+            <div className="page-header"><h1>Results 📊</h1><p>View and export student exam results.</p></div>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input className="form-input" style={{ flex: 1, maxWidth: '300px' }} placeholder="Search student or exam..." value={resultSearch} onChange={e => setResultSearch(e.target.value)} />
+              <select className="form-select" style={{ width: '200px' }} value={resultExamId} onChange={e => setResultExamId(e.target.value)}>
+                <option value="">All Exams</option>
+                {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
               </select>
-              <button onClick={reloadResults} style={{ padding: '11px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#007bff', color: '#fff' }}>
-                Refresh
-              </button>
-              <button onClick={exportResultsCsv} style={{ padding: '11px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#28a745', color: '#fff' }}>
-                Export CSV
-              </button>
+              <button className="btn btn-primary" onClick={reloadResults}>🔍 Search</button>
+              <button className="btn btn-success" onClick={exportCsv}>⬇ Export CSV</button>
             </div>
-
-            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f5f7fb' }}>
-                    {['Student', 'Email', 'Exam', 'Score', 'Total', 'Percentage', 'Completed'].map(header => (
-                      <th key={header} style={{ padding: '12px 10px', textAlign: 'left', color: '#444' }}>{header}</th>
-                    ))}
-                  </tr>
-                </thead>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead><tr><th>Student</th><th>Email</th><th>Exam</th><th>Score</th><th>Total</th><th>Percentage</th><th>Date</th></tr></thead>
                 <tbody>
-                  {results.map(result => (
-                    <tr key={`${result.userId}-${result.examId}`} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: '12px 10px' }}>{result.studentName}</td>
-                      <td style={{ padding: '12px 10px' }}>{result.studentEmail}</td>
-                      <td style={{ padding: '12px 10px' }}>{result.examTitle}</td>
-                      <td style={{ padding: '12px 10px' }}>{result.score}</td>
-                      <td style={{ padding: '12px 10px' }}>{result.totalQuestions}</td>
-                      <td style={{ padding: '12px 10px' }}>{result.percentage.toFixed(2)}%</td>
-                      <td style={{ padding: '12px 10px' }}>{result.completedAt ? new Date(result.completedAt).toLocaleString() : '-'}</td>
+                  {results.map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: '600' }}>{r.studentName}</td>
+                      <td>{r.studentEmail}</td>
+                      <td>{r.examTitle}</td>
+                      <td>{r.score}</td>
+                      <td>{r.totalQuestions}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '60px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${r.percentage}%`, height: '100%', background: r.percentage >= 60 ? '#10b981' : '#ef4444', borderRadius: '3px' }} />
+                          </div>
+                          <span style={{ fontWeight: '600', fontSize: '13px' }}>{r.percentage.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td style={{ fontSize: '13px', color: '#94a3b8' }}>{r.completedAt ? new Date(r.completedAt).toLocaleDateString() : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -636,18 +437,82 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {!loading && tab === 'Profile' && (
-          <div style={{ maxWidth: '520px', backgroundColor: '#fff', padding: '24px', borderRadius: '14px', boxShadow: '0 4px 18px rgba(15,23,42,0.05)' }}>
-            <h2>Update Profile</h2>
-            <form onSubmit={submitProfile}>
-              {['name', 'email', 'password', 'newPassword'].map(field => (
-                <div key={field} style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '6px' }}>{field === 'newPassword' ? 'New Password' : field.charAt(0).toUpperCase() + field.slice(1)}:</label>
-                  <input name={field} type={field.toLowerCase().includes('password') ? 'password' : 'text'} value={profileForm[field]} onChange={handleProfileChange} placeholder={field === 'password' ? 'Current password' : field === 'newPassword' ? 'New password' : field.charAt(0).toUpperCase() + field.slice(1)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }} />
+        {/* ── AI INTERVIEW ── */}
+        {!loading && tab === 'AI Interview' && (
+          <div className="fade-in">
+            <div className="ai-header">
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🤖</div>
+              <h1 style={{ margin: '0 0 8px', fontSize: '26px', fontWeight: '800' }}>AI Mock Interview Coach</h1>
+              <p style={{ margin: 0, opacity: 0.85 }}>Overview of all student mock interview sessions powered by Gemini AI.</p>
+            </div>
+
+            {/* Summary cards */}
+            <div className="stats-grid" style={{ marginBottom: '24px' }}>
+              {[
+                { icon: '🎯', label: 'Total Sessions',  value: interviewSessions.length },
+                { icon: '💼', label: 'Unique Job Roles', value: new Set(interviewSessions.map(s => s.jobRole)).size },
+                { icon: '⭐', label: 'Avg Score',        value: interviewSessions.length ? (interviewSessions.reduce((acc, s) => acc + (s.overallScore || 0), 0) / interviewSessions.length).toFixed(1) + '/10' : '-' },
+                { icon: '👨‍💻', label: 'Students Practiced', value: new Set(interviewSessions.map(s => s.userId)).size },
+              ].map(c => (
+                <div key={c.label} className="stat-card">
+                  <div className="stat-icon">{c.icon}</div>
+                  <div className="stat-label">{c.label}</div>
+                  <div className="stat-value">{c.value}</div>
                 </div>
               ))}
-              <button type="submit" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#007bff', color: '#fff' }}>Update Profile</button>
-            </form>
+            </div>
+
+            {interviewSessions.length === 0 ? (
+              <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                <p style={{ color: '#94a3b8' }}>No interview sessions yet. Students can start practicing from their dashboard.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr><th>Student</th><th>Job Role</th><th>Questions</th><th>Overall Score</th><th>Date</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {interviewSessions.map(s => (
+                      <tr key={s.id}>
+                        <td style={{ fontWeight: '600' }}>{s.studentName || s.userId}</td>
+                        <td><span className="badge badge-purple">💼 {s.jobRole}</span></td>
+                        <td>{s.totalQuestions}</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '60px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${(s.overallScore / 10) * 100}%`, height: '100%', background: s.overallScore >= 7 ? '#10b981' : s.overallScore >= 5 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+                            </div>
+                            <span style={{ fontWeight: '700', fontSize: '14px' }}>{s.overallScore}/10</span>
+                          </div>
+                        </td>
+                        <td style={{ fontSize: '13px', color: '#94a3b8' }}>{s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '-'}</td>
+                        <td><span className={`badge ${s.completed ? 'badge-green' : 'badge-blue'}`}>{s.completed ? 'Completed' : 'In Progress'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── PROFILE ── */}
+        {!loading && tab === 'Profile' && (
+          <div className="fade-in">
+            <div className="page-header"><h1>Profile Settings 👤</h1><p>Update your admin account details.</p></div>
+            <div style={{ maxWidth: '480px', ...formCard }}>
+              <form onSubmit={submitProfile}>
+                {[['name','Name','text'],['email','Email','email'],['password','Current Password','password'],['newPassword','New Password','password']].map(([f,l,t]) => (
+                  <div className="form-group" key={f}>
+                    <label className="form-label">{l}</label>
+                    <input className="form-input" name={f} type={t} value={profileForm[f]} onChange={handleProfileChange} placeholder={f === 'password' ? 'Current password to confirm changes' : f === 'newPassword' ? 'Leave blank to keep current' : ''} />
+                  </div>
+                ))}
+                <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>Save Changes</button>
+              </form>
+            </div>
           </div>
         )}
       </main>
