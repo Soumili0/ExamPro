@@ -75,7 +75,7 @@ export default function TeacherDashboard() {
   const submitExam = async e => {
     e.preventDefault();
     try {
-      const p = { ...examForm, durationMinutes: +examForm.durationMinutes, totalMarks: +examForm.totalMarks };
+      const p = { ...examForm, durationMinutes: +examForm.durationMinutes, totalMarks: +examForm.totalMarks, createdBy: user?.userId };
       editExam ? await updateExam(editExam.id, p) : await createExam(p);
       notify(editExam ? 'Exam updated.' : 'Exam created.');
       setExamForm({ title: '', subject: '', durationMinutes: 30, totalMarks: 100, startTime: '', endTime: '', published: false });
@@ -88,7 +88,7 @@ export default function TeacherDashboard() {
   const submitQuestion = async e => {
     e.preventDefault();
     try {
-      const p = { ...questionForm, examId: questionForm.examId ? +questionForm.examId : null };
+      const p = { ...questionForm, examId: questionForm.examId ? +questionForm.examId : null, createdBy: user?.userId };
       editQuestion ? await updateQuestion(editQuestion.id, p) : await createQuestion(p);
       notify(editQuestion ? 'Question updated.' : 'Question created.');
       setQuestionForm({ questionTitle: '', option1: '', option2: '', option3: '', option4: '', correctAnswer: '', examId: '' });

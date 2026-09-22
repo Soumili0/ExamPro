@@ -40,6 +40,33 @@ public class AdminController {
         return userService.getAllStudents();
     }
 
+    // ── Teacher Management ──
+    @GetMapping("/teachers")
+    public List<User> getTeachers() {
+        return userService.getAllTeachers();
+    }
+
+    @PostMapping("/teachers")
+    public User addTeacher(@RequestBody StudentRequest request) {
+        return userService.createTeacher(request);
+    }
+
+    @PutMapping("/teachers/{id}")
+    public User updateTeacher(@PathVariable Long id, @RequestBody StudentRequest request) {
+        return userService.updateTeacher(id, request);
+    }
+
+    @DeleteMapping("/teachers/{id}")
+    public String deleteTeacher(@PathVariable Long id) {
+        userService.deleteTeacher(id);
+        return "Teacher deleted";
+    }
+
+    @PutMapping("/teachers/{id}/active")
+    public User setTeacherActive(@PathVariable Long id, @RequestParam boolean active) {
+        return userService.setActive(id, active);
+    }
+
     @PostMapping("/students")
     public User addStudent(@RequestBody StudentRequest request) {
         return userService.createStudent(request);

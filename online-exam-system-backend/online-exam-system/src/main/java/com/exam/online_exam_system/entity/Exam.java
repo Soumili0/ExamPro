@@ -31,6 +31,8 @@ public class Exam {
 
     private boolean published;
 
+    private Long createdBy; // teacher userId who created this exam
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

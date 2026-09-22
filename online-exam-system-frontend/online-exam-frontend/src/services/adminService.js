@@ -87,3 +87,29 @@ export async function getResults(query, examId) {
   const response = await apiClient.get(`/admin/results?${params.toString()}`);
   return response.data;
 }
+
+// ── Teacher Management ──
+export async function getTeachers() {
+  const response = await apiClient.get('/admin/teachers');
+  return response.data;
+}
+
+export async function createTeacher(teacher) {
+  const response = await apiClient.post('/admin/teachers', teacher);
+  return response.data;
+}
+
+export async function updateTeacher(teacherId, teacher) {
+  const response = await apiClient.put(`/admin/teachers/${teacherId}`, teacher);
+  return response.data;
+}
+
+export async function deleteTeacher(teacherId) {
+  const response = await apiClient.delete(`/admin/teachers/${teacherId}`);
+  return response.data;
+}
+
+export async function setTeacherActive(teacherId, active) {
+  const response = await apiClient.put(`/admin/teachers/${teacherId}/active?active=${active}`);
+  return response.data;
+}

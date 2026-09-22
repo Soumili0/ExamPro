@@ -5,27 +5,29 @@ import apiClient from '../../utils/api';
 import {
   getDashboardStats, getStudents, createStudent, updateStudent,
   deleteStudent, setStudentActive, resetStudentPassword,
-  getExams, createExam, updateExam, deleteExam, publishExam,
-  getQuestions, createQuestion, updateQuestion, deleteQuestion,
-  getResults
+  getTeachers, createTeacher, updateTeacher, deleteTeacher, setTeacherActive,
+  getExams, getQuestions, getResults
 } from '../../services/adminService';
 
 const NAV = [
-  { id: 'Dashboard',  icon: '🏠' },
-  { id: 'Students',   icon: '👨‍🎓' },
-  { id: 'Exams',      icon: '📝' },
-  { id: 'Questions',  icon: '❓' },
-  { id: 'Results',    icon: '📊' },
+  { id: 'Dashboard', icon: '🏠' },
+  { id: 'Teachers',  icon: '👩‍🏫' },
+  { id: 'Students',  icon: '👨‍🎓' },
+  { id: 'Exams',     icon: '📝' },
+  { id: 'Questions', icon: '❓' },
+  { id: 'Results',   icon: '📊' },
   { id: 'AI Interview', icon: '🤖', isAI: true },
-  { id: 'Profile',    icon: '👤' },
+  { id: 'Profile',   icon: '👤' },
 ];
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState('Dashboard');
+
   const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [exams, setExams] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [results, setResults] = useState([]);
@@ -36,25 +38,28 @@ export default function AdminDashboard() {
   const [resultSearch, setResultSearch] = useState('');
   const [resultExamId, setResultExamId] = useState('');
 
-  // Forms
+  // Teacher form
+  const [teacherForm, setTeacherForm] = useState({ name: '', email: '', password: '', department: '', active: true });
+  const [editingTeacher, setEditingTeacher] = useState(null);
+
+  // Student form
   const [studentForm, setStudentForm] = useState({ name: '', email: '', password: '', roll: '', department: '', active: true });
-  const [examForm, setExamForm] = useState({ title: '', subject: '', durationMinutes: 30, totalMarks: 100, startTime: '', endTime: '', published: false });
-  const [questionForm, setQuestionForm] = useState({ questionTitle: '', option1: '', option2: '', option3: '', option4: '', correctAnswer: '', examId: '' });
-  const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '', newPassword: '' });
   const [editingStudent, setEditingStudent] = useState(null);
-  const [editingExam, setEditingExam] = useState(null);
-  const [editingQuestion, setEditingQuestion] = useState(null);
+
+  // Profile form
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '', newPassword: '' });
 
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [statsData, studentData, examData, questionData, resultData] = await Promise.all([
-          getDashboardStats(), getStudents(), getExams(), getQuestions(), getResults('', null)
+        const [statsData, studentData, teacherData, examData, questionData, resultData] = await Promise.all([
+          getDashboardStats(), getStudents(), getTeachers(), getExams(), getQuestions(), getResults('', null)
         ]);
         setStats(statsData);
         setStudents(studentData);
+        setTeachers(teacherData);
         setExams(examData);
         setQuestions(questionData);
         setResults(resultData);
@@ -69,78 +74,71 @@ export default function AdminDashboard() {
     setProfileForm(p => ({ ...p, name: user.name || '', email: user.email || '' }));
   }, [user]);
 
-  // Load interview sessions when tab opens
   useEffect(() => {
     if (tab !== 'AI Interview') return;
     apiClient.get('/interview/admin/all').then(res => setInterviewSessions(res.data || [])).catch(() => {});
   }, [tab]);
 
-  const reloadData = async () => {
+  const reloadAll = async () => {
     try {
       setLoading(true);
-      const [s, st, ex, q] = await Promise.all([getDashboardStats(), getStudents(), getExams(), getQuestions()]);
-      setStats(s); setStudents(st); setExams(ex); setQuestions(q);
-      await reloadResults();
+      const [s, st, te, ex, q, r] = await Promise.all([
+        getDashboardStats(), getStudents(), getTeachers(), getExams(), getQuestions(), getResults(resultSearch, resultExamId || null)
+      ]);
+      setStats(s); setStudents(st); setTeachers(te); setExams(ex); setQuestions(q); setResults(r);
     } catch { setError('Unable to refresh'); } finally { setLoading(false); }
   };
-  const reloadResults = async () => {
-    try { setResults(await getResults(resultSearch, resultExamId || null)); }
-    catch { setError('Unable to load results'); }
+
+  const notify = msg => { setStatusMessage(msg); setTimeout(() => setStatusMessage(''), 4000); };
+
+  // ── Teacher handlers ──
+  const handleTeacherChange = e => {
+    const { name, value, type, checked } = e.target;
+    setTeacherForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  };
+  const submitTeacher = async e => {
+    e.preventDefault();
+    try {
+      if (editingTeacher) { await updateTeacher(editingTeacher.id, teacherForm); notify('Teacher updated.'); }
+      else { await createTeacher(teacherForm); notify('Teacher created.'); }
+      setTeacherForm({ name: '', email: '', password: '', department: '', active: true });
+      setEditingTeacher(null);
+      await reloadAll();
+    } catch (err) { setError(err.response?.data?.message || 'Teacher save failed'); }
+  };
+  const startEditingTeacher = t => {
+    setEditingTeacher(t);
+    setTeacherForm({ name: t.name || '', email: t.email || '', password: '', department: t.department || '', active: t.active });
   };
 
-  // Handlers
-  const handleStudentChange = e => { const { name, value, type, checked } = e.target; setStudentForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value })); };
-  const handleExamChange = e => { const { name, value, type, checked } = e.target; setExamForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value })); };
-  const handleQuestionChange = e => { const { name, value } = e.target; setQuestionForm(f => ({ ...f, [name]: value })); };
-  const handleProfileChange = e => { const { name, value } = e.target; setProfileForm(f => ({ ...f, [name]: value })); };
-
-  const notify = (msg) => { setStatusMessage(msg); setTimeout(() => setStatusMessage(''), 4000); };
-
+  // ── Student handlers ──
+  const handleStudentChange = e => {
+    const { name, value, type, checked } = e.target;
+    setStudentForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  };
   const submitStudent = async e => {
     e.preventDefault();
     try {
       if (editingStudent) { await updateStudent(editingStudent.id, studentForm); notify('Student updated.'); }
       else { await createStudent(studentForm); notify('Student created.'); }
       setStudentForm({ name: '', email: '', password: '', roll: '', department: '', active: true });
-      setEditingStudent(null); await reloadData();
+      setEditingStudent(null);
+      await reloadAll();
     } catch (err) { setError(err.response?.data?.message || 'Student save failed'); }
   };
-  const submitExam = async e => {
-    e.preventDefault();
-    try {
-      const payload = { ...examForm, durationMinutes: Number(examForm.durationMinutes), totalMarks: Number(examForm.totalMarks) };
-      if (editingExam) { await updateExam(editingExam.id, payload); notify('Exam updated.'); }
-      else { await createExam(payload); notify('Exam created.'); }
-      setExamForm({ title: '', subject: '', durationMinutes: 30, totalMarks: 100, startTime: '', endTime: '', published: false });
-      setEditingExam(null); await reloadData();
-    } catch (err) { setError(err.response?.data?.message || 'Exam save failed'); }
+  const startEditingStudent = s => {
+    setEditingStudent(s);
+    setStudentForm({ name: s.name || '', email: s.email || '', password: '', roll: s.roll || '', department: s.department || '', active: s.active });
   };
-  const submitQuestion = async e => {
-    e.preventDefault();
-    try {
-      const payload = { ...questionForm, examId: questionForm.examId ? Number(questionForm.examId) : null };
-      if (editingQuestion) { await updateQuestion(editingQuestion.id, payload); notify('Question updated.'); }
-      else { await createQuestion(payload); notify('Question created.'); }
-      setQuestionForm({ questionTitle: '', option1: '', option2: '', option3: '', option4: '', correctAnswer: '', examId: '' });
-      setEditingQuestion(null); await reloadData();
-    } catch (err) { setError(err.response?.data?.message || 'Question save failed'); }
-  };
+
   const submitProfile = async e => {
     e.preventDefault();
-    try { await apiClient.put(`/user/profile?userId=${user.userId}`, profileForm); notify('Profile updated.'); setProfileForm(f => ({ ...f, password: '', newPassword: '' })); }
-    catch { setError('Profile update failed.'); }
+    try {
+      await apiClient.put(`/user/profile?userId=${user.userId}`, profileForm);
+      notify('Profile updated.');
+      setProfileForm(f => ({ ...f, password: '', newPassword: '' }));
+    } catch { setError('Profile update failed.'); }
   };
-
-  const startEditingStudent = s => { setEditingStudent(s); setStudentForm({ name: s.name || '', email: s.email || '', password: '', roll: s.roll || '', department: s.department || '', active: s.active }); };
-  const startEditingExam = ex => { setEditingExam(ex); setExamForm({ title: ex.title || '', subject: ex.subject || '', durationMinutes: ex.durationMinutes || 30, totalMarks: ex.totalMarks || 100, startTime: ex.startTime ? ex.startTime.replace('Z', '') : '', endTime: ex.endTime ? ex.endTime.replace('Z', '') : '', published: ex.published || false }); };
-  const startEditingQuestion = q => { setEditingQuestion(q); setQuestionForm({ questionTitle: q.questionTitle || '', option1: q.option1 || '', option2: q.option2 || '', option3: q.option3 || '', option4: q.option4 || '', correctAnswer: q.correctAnswer || '', examId: q.exam?.id || '' }); };
-
-  const handleDeleteStudent = async id => { try { await deleteStudent(id); notify('Student deleted.'); await reloadData(); } catch { setError('Delete failed.'); } };
-  const handleToggleActive = async (id, active) => { try { await setStudentActive(id, active); notify(active ? 'Activated.' : 'Deactivated.'); await reloadData(); } catch { setError('Update failed.'); } };
-  const handleResetPwd = async (id) => { const pw = prompt('New password:'); if (pw) { try { await resetStudentPassword(id, pw); notify('Password reset.'); } catch { setError('Reset failed.'); } } };
-  const handleDeleteExam = async id => { try { await deleteExam(id); notify('Exam deleted.'); await reloadData(); } catch { setError('Delete failed.'); } };
-  const handleTogglePublish = async (id, p) => { try { await publishExam(id, p); notify(p ? 'Published.' : 'Unpublished.'); await reloadData(); } catch { setError('Update failed.'); } };
-  const handleDeleteQuestion = async id => { try { await deleteQuestion(id); notify('Question deleted.'); await reloadData(); } catch { setError('Delete failed.'); } };
 
   const exportCsv = () => {
     if (!results.length) return;
@@ -155,8 +153,6 @@ export default function AdminDashboard() {
   if (!user) return <div style={{ padding: '40px' }}>Please log in.</div>;
   if (user.role !== 'admin') return <div style={{ padding: '40px' }}>Access denied.</div>;
 
-  // ── shared input style ──
-  const inp = { width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', background: '#f8fafc', outline: 'none' };
   const formCard = { background: '#fff', borderRadius: '14px', padding: '24px', boxShadow: '0 2px 12px rgba(15,23,42,0.06)' };
 
   return (
@@ -178,7 +174,8 @@ export default function AdminDashboard() {
         <div className="sidebar-user">
           <div style={{ fontWeight: '600', color: '#e2e8f0', marginBottom: '2px' }}>{user.email}</div>
           <div style={{ fontSize: '12px', marginBottom: '12px' }}>Administrator</div>
-          <button className="btn btn-danger" style={{ width: '100%', padding: '9px' }} onClick={async () => { await logout(); navigate('/login'); }}>
+          <button className="btn btn-danger" style={{ width: '100%', padding: '9px' }}
+            onClick={async () => { await logout(); navigate('/login'); }}>
             🚪 Logout
           </button>
         </div>
@@ -195,10 +192,11 @@ export default function AdminDashboard() {
           <div className="fade-in">
             <div className="page-header">
               <h1>Admin Dashboard 🏠</h1>
-              <p>Overview of your platform stats and activity.</p>
+              <p>Platform overview — monitor teachers, students, exams and results.</p>
             </div>
             <div className="stats-grid">
               {[
+                { icon: '👩‍🏫', label: 'Total Teachers',  value: stats?.totalTeachers ?? 0 },
                 { icon: '👨‍🎓', label: 'Total Students',  value: stats?.totalStudents ?? 0 },
                 { icon: '📝', label: 'Total Exams',      value: stats?.totalExams ?? 0 },
                 { icon: '❓', label: 'Total Questions',   value: stats?.totalQuestions ?? 0 },
@@ -215,11 +213,76 @@ export default function AdminDashboard() {
             <div className="card">
               <h3 style={{ margin: '0 0 12px' }}>Quick Actions</h3>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                {[['Students','👨‍🎓'],['Exams','📝'],['Questions','❓'],['Results','📊'],['AI Interview','🤖']].map(([t,icon]) => (
+                {[['Teachers','👩‍🏫'],['Students','👨‍🎓'],['Exams','📝'],['Questions','❓'],['Results','📊'],['AI Interview','🤖']].map(([t,icon]) => (
                   <button key={t} className={`btn ${t === 'AI Interview' ? 'btn-ai' : 'btn-outline'}`} onClick={() => setTab(t)}>
                     {icon} {t}
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TEACHERS ── */}
+        {!loading && tab === 'Teachers' && (
+          <div className="fade-in">
+            <div className="page-header"><h1>Teacher Management 👩‍🏫</h1><p>Add and manage teacher accounts.</p></div>
+            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+              <div style={{ ...formCard, width: '320px', flexShrink: 0 }}>
+                <h3 style={{ margin: '0 0 18px' }}>{editingTeacher ? 'Edit Teacher' : 'Add Teacher'}</h3>
+                <form onSubmit={submitTeacher}>
+                  {['name','email','department'].map(f => (
+                    <div className="form-group" key={f}>
+                      <label className="form-label">{f.charAt(0).toUpperCase() + f.slice(1)}</label>
+                      <input className="form-input" name={f} value={teacherForm[f]} onChange={handleTeacherChange} required={f !== 'department'} />
+                    </div>
+                  ))}
+                  {!editingTeacher && (
+                    <div className="form-group">
+                      <label className="form-label">Password</label>
+                      <input className="form-input" name="password" type="password" value={teacherForm.password} onChange={handleTeacherChange} required />
+                    </div>
+                  )}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', fontSize: '14px' }}>
+                    <input type="checkbox" name="active" checked={teacherForm.active} onChange={handleTeacherChange} style={{ accentColor: '#4f46e5' }} />
+                    Active account
+                  </label>
+                  <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>
+                    {editingTeacher ? 'Save Changes' : 'Create Teacher'}
+                  </button>
+                  {editingTeacher && (
+                    <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }}
+                      onClick={() => { setEditingTeacher(null); setTeacherForm({ name:'',email:'',password:'',department:'',active:true }); }}>
+                      Cancel
+                    </button>
+                  )}
+                </form>
+              </div>
+              <div style={{ flex: 1, ...formCard }}>
+                <h3 style={{ margin: '0 0 18px' }}>All Teachers ({teachers.length})</h3>
+                <div className="table-wrap" style={{ boxShadow: 'none' }}>
+                  <table className="data-table">
+                    <thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {teachers.map(t => (
+                        <tr key={t.id}>
+                          <td style={{ fontWeight: '600' }}>{t.name}</td>
+                          <td>{t.email}</td>
+                          <td>{t.department || '-'}</td>
+                          <td><span className={`badge ${t.active ? 'badge-green' : 'badge-red'}`}>{t.active ? 'Active' : 'Inactive'}</span></td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingTeacher(t)}>Edit</button>
+                              <button className="btn btn-danger"  style={{ padding: '5px 10px', fontSize: '12px' }} onClick={async () => { await deleteTeacher(t.id); notify('Teacher deleted.'); await reloadAll(); }}>Delete</button>
+                              <button className="btn btn-ghost"   style={{ padding: '5px 10px', fontSize: '12px' }} onClick={async () => { await setTeacherActive(t.id, !t.active); notify(t.active ? 'Deactivated.' : 'Activated.'); await reloadAll(); }}>{t.active ? 'Deactivate' : 'Activate'}</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {teachers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No teachers yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -252,7 +315,12 @@ export default function AdminDashboard() {
                   <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>
                     {editingStudent ? 'Save Changes' : 'Create Student'}
                   </button>
-                  {editingStudent && <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }} onClick={() => { setEditingStudent(null); setStudentForm({ name:'',email:'',password:'',roll:'',department:'',active:true }); }}>Cancel</button>}
+                  {editingStudent && (
+                    <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }}
+                      onClick={() => { setEditingStudent(null); setStudentForm({ name:'',email:'',password:'',roll:'',department:'',active:true }); }}>
+                      Cancel
+                    </button>
+                  )}
                 </form>
               </div>
               <div style={{ flex: 1, ...formCard }}>
@@ -271,9 +339,9 @@ export default function AdminDashboard() {
                           <td>
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                               <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingStudent(s)}>Edit</button>
-                              <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDeleteStudent(s.id)}>Delete</button>
-                              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleToggleActive(s.id, !s.active)}>{s.active ? 'Deactivate' : 'Activate'}</button>
-                              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleResetPwd(s.id)}>Reset Pwd</button>
+                              <button className="btn btn-danger"  style={{ padding: '5px 10px', fontSize: '12px' }} onClick={async () => { await deleteStudent(s.id); notify('Student deleted.'); await reloadAll(); }}>Delete</button>
+                              <button className="btn btn-ghost"   style={{ padding: '5px 10px', fontSize: '12px' }} onClick={async () => { await setStudentActive(s.id, !s.active); notify(s.active ? 'Deactivated.' : 'Activated.'); await reloadAll(); }}>{s.active ? 'Deactivate' : 'Activate'}</button>
+                              <button className="btn btn-ghost"   style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => { const pw = prompt('New password:'); if (pw) resetStudentPassword(s.id, pw).then(() => notify('Password reset.')).catch(() => setError('Reset failed.')); }}>Reset Pwd</button>
                             </div>
                           </td>
                         </tr>
@@ -286,112 +354,70 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── EXAMS ── */}
+        {/* ── EXAMS (monitor only) ── */}
         {!loading && tab === 'Exams' && (
           <div className="fade-in">
-            <div className="page-header"><h1>Exam Management 📝</h1><p>Create and publish exams for students.</p></div>
-            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-              <div style={{ ...formCard, width: '320px', flexShrink: 0 }}>
-                <h3 style={{ margin: '0 0 18px' }}>{editingExam ? 'Edit Exam' : 'Create Exam'}</h3>
-                <form onSubmit={submitExam}>
-                  {[['title','Title'],['subject','Subject'],['durationMinutes','Duration (min)'],['totalMarks','Total Marks']].map(([f,l]) => (
-                    <div className="form-group" key={f}>
-                      <label className="form-label">{l}</label>
-                      <input className="form-input" name={f} value={examForm[f]} onChange={handleExamChange} required={f === 'title'} />
-                    </div>
-                  ))}
-                  {[['startTime','Start Time'],['endTime','End Time']].map(([f,l]) => (
-                    <div className="form-group" key={f}>
-                      <label className="form-label">{l}</label>
-                      <input className="form-input" name={f} type="datetime-local" value={examForm[f]} onChange={handleExamChange} />
-                    </div>
-                  ))}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', fontSize: '14px' }}>
-                    <input type="checkbox" name="published" checked={examForm.published} onChange={handleExamChange} style={{ accentColor: '#4f46e5' }} />
-                    Publish immediately
-                  </label>
-                  <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>{editingExam ? 'Update Exam' : 'Create Exam'}</button>
-                  {editingExam && <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }} onClick={() => { setEditingExam(null); setExamForm({ title:'',subject:'',durationMinutes:30,totalMarks:100,startTime:'',endTime:'',published:false }); }}>Cancel</button>}
-                </form>
-              </div>
-              <div style={{ flex: 1, ...formCard }}>
-                <h3 style={{ margin: '0 0 18px' }}>All Exams ({exams.length})</h3>
-                <div className="table-wrap" style={{ boxShadow: 'none' }}>
-                  <table className="data-table">
-                    <thead><tr><th>Title</th><th>Subject</th><th>Duration</th><th>Marks</th><th>Status</th><th>Actions</th></tr></thead>
-                    <tbody>
-                      {exams.map(ex => (
-                        <tr key={ex.id}>
-                          <td style={{ fontWeight: '600' }}>{ex.title}</td>
-                          <td>{ex.subject}</td>
-                          <td>{ex.durationMinutes} min</td>
-                          <td>{ex.totalMarks}</td>
-                          <td><span className={`badge ${ex.published ? 'badge-green' : 'badge-gray'}`}>{ex.published ? 'Published' : 'Draft'}</span></td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                              <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingExam(ex)}>Edit</button>
-                              <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDeleteExam(ex.id)}>Delete</button>
-                              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleTogglePublish(ex.id, !ex.published)}>{ex.published ? 'Unpublish' : 'Publish'}</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            <div className="page-header">
+              <h1>Exams Overview 📝</h1>
+              <p>Monitor all exams created by teachers. Editing is done by teachers.</p>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead><tr><th>Title</th><th>Subject</th><th>Duration</th><th>Marks</th><th>Created By</th><th>Status</th></tr></thead>
+                <tbody>
+                  {exams.map(ex => {
+                    const teacher = teachers.find(t => t.id === ex.createdBy);
+                    return (
+                      <tr key={ex.id}>
+                        <td style={{ fontWeight: '600' }}>{ex.title}</td>
+                        <td>{ex.subject}</td>
+                        <td>{ex.durationMinutes} min</td>
+                        <td>{ex.totalMarks}</td>
+                        <td>
+                          {teacher
+                            ? <span className="badge badge-purple">👩‍🏫 {teacher.name}</span>
+                            : <span style={{ color: '#94a3b8' }}>—</span>}
+                        </td>
+                        <td><span className={`badge ${ex.published ? 'badge-green' : 'badge-gray'}`}>{ex.published ? 'Published' : 'Draft'}</span></td>
+                      </tr>
+                    );
+                  })}
+                  {exams.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No exams yet.</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* ── QUESTIONS ── */}
+        {/* ── QUESTIONS (monitor only) ── */}
         {!loading && tab === 'Questions' && (
           <div className="fade-in">
-            <div className="page-header"><h1>Question Management ❓</h1><p>Add and manage MCQ questions for exams.</p></div>
-            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-              <div style={{ ...formCard, width: '340px', flexShrink: 0 }}>
-                <h3 style={{ margin: '0 0 18px' }}>{editingQuestion ? 'Edit Question' : 'Add Question'}</h3>
-                <form onSubmit={submitQuestion}>
-                  {[['questionTitle','Question'],['option1','Option A'],['option2','Option B'],['option3','Option C'],['option4','Option D'],['correctAnswer','Correct Answer']].map(([f,l]) => (
-                    <div className="form-group" key={f}>
-                      <label className="form-label">{l}</label>
-                      <input className="form-input" name={f} value={questionForm[f]} onChange={handleQuestionChange} required />
-                    </div>
-                  ))}
-                  <div className="form-group">
-                    <label className="form-label">Assign to Exam</label>
-                    <select className="form-select" name="examId" value={questionForm.examId} onChange={handleQuestionChange}>
-                      <option value="">None</option>
-                      {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
-                    </select>
-                  </div>
-                  <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>{editingQuestion ? 'Update' : 'Add Question'}</button>
-                  {editingQuestion && <button className="btn btn-ghost" type="button" style={{ width: '100%', marginTop: '8px' }} onClick={() => { setEditingQuestion(null); setQuestionForm({ questionTitle:'',option1:'',option2:'',option3:'',option4:'',correctAnswer:'',examId:'' }); }}>Cancel</button>}
-                </form>
-              </div>
-              <div style={{ flex: 1, ...formCard }}>
-                <h3 style={{ margin: '0 0 18px' }}>All Questions ({questions.length})</h3>
-                <div className="table-wrap" style={{ boxShadow: 'none' }}>
-                  <table className="data-table">
-                    <thead><tr><th>Question</th><th>Answer</th><th>Exam</th><th>Actions</th></tr></thead>
-                    <tbody>
-                      {questions.map(q => (
-                        <tr key={q.id}>
-                          <td style={{ maxWidth: '300px' }}>{q.questionTitle}</td>
-                          <td><span className="badge badge-green">{q.correctAnswer}</span></td>
-                          <td>{q.exam?.title || '-'}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button className="btn btn-outline" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => startEditingQuestion(q)}>Edit</button>
-                              <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDeleteQuestion(q.id)}>Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            <div className="page-header">
+              <h1>Questions Overview ❓</h1>
+              <p>Monitor all questions added by teachers. Editing is done by teachers.</p>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead><tr><th>Question</th><th>Correct Answer</th><th>Exam</th><th>Created By</th></tr></thead>
+                <tbody>
+                  {questions.map(q => {
+                    const teacher = teachers.find(t => t.id === q.createdBy);
+                    return (
+                      <tr key={q.id}>
+                        <td style={{ maxWidth: '340px' }}>{q.questionTitle}</td>
+                        <td><span className="badge badge-green">{q.correctAnswer}</span></td>
+                        <td>{q.exam?.title || '-'}</td>
+                        <td>
+                          {teacher
+                            ? <span className="badge badge-purple">👩‍🏫 {teacher.name}</span>
+                            : <span style={{ color: '#94a3b8' }}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {questions.length === 0 && <tr><td colSpan="4" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No questions yet.</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -406,7 +432,7 @@ export default function AdminDashboard() {
                 <option value="">All Exams</option>
                 {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
               </select>
-              <button className="btn btn-primary" onClick={reloadResults}>🔍 Search</button>
+              <button className="btn btn-primary" onClick={async () => { setResults(await getResults(resultSearch, resultExamId || null)); }}>🔍 Search</button>
               <button className="btn btn-success" onClick={exportCsv}>⬇ Export CSV</button>
             </div>
             <div className="table-wrap">
@@ -431,6 +457,7 @@ export default function AdminDashboard() {
                       <td style={{ fontSize: '13px', color: '#94a3b8' }}>{r.completedAt ? new Date(r.completedAt).toLocaleDateString() : '-'}</td>
                     </tr>
                   ))}
+                  {results.length === 0 && <tr><td colSpan="7" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No results found.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -443,15 +470,13 @@ export default function AdminDashboard() {
             <div className="ai-header">
               <div style={{ fontSize: '40px', marginBottom: '12px' }}>🤖</div>
               <h1 style={{ margin: '0 0 8px', fontSize: '26px', fontWeight: '800' }}>AI Mock Interview Coach</h1>
-              <p style={{ margin: 0, opacity: 0.85 }}>Overview of all student mock interview sessions powered by Gemini AI.</p>
+              <p style={{ margin: 0, opacity: 0.85 }}>Overview of all student mock interview sessions.</p>
             </div>
-
-            {/* Summary cards */}
             <div className="stats-grid" style={{ marginBottom: '24px' }}>
               {[
-                { icon: '🎯', label: 'Total Sessions',  value: interviewSessions.length },
-                { icon: '💼', label: 'Unique Job Roles', value: new Set(interviewSessions.map(s => s.jobRole)).size },
-                { icon: '⭐', label: 'Avg Score',        value: interviewSessions.length ? (interviewSessions.reduce((acc, s) => acc + (s.overallScore || 0), 0) / interviewSessions.length).toFixed(1) + '/10' : '-' },
+                { icon: '🎯', label: 'Total Sessions',     value: interviewSessions.length },
+                { icon: '💼', label: 'Unique Job Roles',   value: new Set(interviewSessions.map(s => s.jobRole)).size },
+                { icon: '⭐', label: 'Avg Score',          value: interviewSessions.length ? (interviewSessions.reduce((acc, s) => acc + (s.overallScore || 0), 0) / interviewSessions.length).toFixed(1) + '/10' : '-' },
                 { icon: '👨‍💻', label: 'Students Practiced', value: new Set(interviewSessions.map(s => s.userId)).size },
               ].map(c => (
                 <div key={c.label} className="stat-card">
@@ -461,34 +486,31 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
-
             {interviewSessions.length === 0 ? (
               <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
                 <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
-                <p style={{ color: '#94a3b8' }}>No interview sessions yet. Students can start practicing from their dashboard.</p>
+                <p style={{ color: '#94a3b8' }}>No interview sessions yet.</p>
               </div>
             ) : (
               <div className="table-wrap">
                 <table className="data-table">
-                  <thead>
-                    <tr><th>Student</th><th>Job Role</th><th>Questions</th><th>Overall Score</th><th>Date</th><th>Status</th></tr>
-                  </thead>
+                  <thead><tr><th>Student</th><th>Job Role</th><th>Questions</th><th>Overall Score</th><th>Date</th><th>Status</th></tr></thead>
                   <tbody>
                     {interviewSessions.map(s => (
                       <tr key={s.id}>
-                        <td style={{ fontWeight: '600' }}>{s.studentName || s.userId}</td>
+                        <td style={{ fontWeight: '600' }}>{s.studentName || `User #${s.userId}`}</td>
                         <td><span className="badge badge-purple">💼 {s.jobRole}</span></td>
                         <td>{s.totalQuestions}</td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '60px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ width: `${(s.overallScore / 10) * 100}%`, height: '100%', background: s.overallScore >= 7 ? '#10b981' : s.overallScore >= 5 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+                            <div style={{ width: '50px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${((s.overallScore||0)/10)*100}%`, height: '100%', background: (s.overallScore||0)>=7?'#10b981':(s.overallScore||0)>=5?'#f59e0b':'#ef4444', borderRadius: '3px' }} />
                             </div>
-                            <span style={{ fontWeight: '700', fontSize: '14px' }}>{s.overallScore}/10</span>
+                            <span style={{ fontWeight: '700' }}>{(s.overallScore||0)}/10</span>
                           </div>
                         </td>
                         <td style={{ fontSize: '13px', color: '#94a3b8' }}>{s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '-'}</td>
-                        <td><span className={`badge ${s.completed ? 'badge-green' : 'badge-blue'}`}>{s.completed ? 'Completed' : 'In Progress'}</span></td>
+                        <td><span className={`badge ${s.completed ? 'badge-green' : 'badge-blue'}`}>{s.completed ? 'Done' : 'In Progress'}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -501,16 +523,24 @@ export default function AdminDashboard() {
         {/* ── PROFILE ── */}
         {!loading && tab === 'Profile' && (
           <div className="fade-in">
-            <div className="page-header"><h1>Profile Settings 👤</h1><p>Update your admin account details.</p></div>
-            <div style={{ maxWidth: '480px', ...formCard }}>
+            <div className="page-header"><h1>My Profile 👤</h1><p>Update your admin account details.</p></div>
+            <div style={{ ...formCard, maxWidth: '480px' }}>
               <form onSubmit={submitProfile}>
-                {[['name','Name','text'],['email','Email','email'],['password','Current Password','password'],['newPassword','New Password','password']].map(([f,l,t]) => (
+                {[['name','Name'],['email','Email']].map(([f,l]) => (
                   <div className="form-group" key={f}>
                     <label className="form-label">{l}</label>
-                    <input className="form-input" name={f} type={t} value={profileForm[f]} onChange={handleProfileChange} placeholder={f === 'password' ? 'Current password to confirm changes' : f === 'newPassword' ? 'Leave blank to keep current' : ''} />
+                    <input className="form-input" name={f} value={profileForm[f]} onChange={e => setProfileForm(p => ({ ...p, [e.target.name]: e.target.value }))} />
                   </div>
                 ))}
-                <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>Save Changes</button>
+                <div className="form-group">
+                  <label className="form-label">Current Password</label>
+                  <input className="form-input" name="password" type="password" value={profileForm.password} onChange={e => setProfileForm(p => ({ ...p, password: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">New Password</label>
+                  <input className="form-input" name="newPassword" type="password" value={profileForm.newPassword} onChange={e => setProfileForm(p => ({ ...p, newPassword: e.target.value }))} />
+                </div>
+                <button className="btn btn-primary" type="submit" style={{ width: '100%' }}>Update Profile</button>
               </form>
             </div>
           </div>

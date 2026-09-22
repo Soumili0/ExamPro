@@ -69,6 +69,7 @@ public class ExamService {
         exam.setStartTime(request.getStartTime());
         exam.setEndTime(request.getEndTime());
         exam.setPublished(Boolean.TRUE.equals(request.getPublished()));
+        exam.setCreatedBy(request.getCreatedBy());
         return examRepository.save(exam);
     }
 
@@ -154,6 +155,7 @@ public class ExamService {
     public DashboardStatsDto getDashboardStats() {
         DashboardStatsDto stats = new DashboardStatsDto();
         stats.setTotalStudents(userRepository.findAllByRole("student").size());
+        stats.setTotalTeachers(userRepository.findAllByRole("teacher").size());
         stats.setTotalExams(examRepository.count());
         stats.setTotalQuestions(questionRepository.count());
         stats.setActiveExams(examRepository.findByPublished(true).size());

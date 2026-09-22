@@ -24,6 +24,43 @@ public class UserService {
         return userRepository.findAllByRole("student");
     }
 
+    public List<User> getAllTeachers() {
+        return userRepository.findAllByRole("teacher");
+    }
+
+    public User createTeacher(StudentRequest request) {
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            throw new RuntimeException("Email already registered");
+        }
+        User user = new User();
+        user.setName(request.getName());
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole("teacher");
+        user.setDepartment(request.getDepartment());
+        user.setActive(request.isActive());
+        return userRepository.save(user);
+    }
+
+    public User updateTeacher(Long teacherId, StudentRequest request) {
+        if (teacherId == null) {
+            throw new RuntimeException("Teacher id is null");
+        }
+        User user = userRepository.findById(teacherId)
+                .orElseThrow(() -> new RuntimeException("Teacher not found with id: " + teacherId));
+        if (request.getName() != null) user.setName(request.getName());
+        if (request.getEmail() != null) user.setEmail(request.getEmail());
+        if (request.getPassword() != null && !request.getPassword().isEmpty())
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+        if (request.getDepartment() != null) user.setDepartment(request.getDepartment());
+        user.setActive(request.isActive());
+        return userRepository.save(user);
+    }
+
+    public void deleteTeacher(Long teacherId) {
+        userRepository.deleteById(teacherId);
+    }
+
     public User createStudent(StudentRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new RuntimeException("Email already registered");

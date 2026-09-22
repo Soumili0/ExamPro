@@ -24,6 +24,8 @@ public class Question {
 
     private String correctAnswer;
 
+    private Long createdBy; // teacher userId who created this question
+
     @ManyToOne
     @JoinColumn(name = "exam_id")
     @JsonIgnoreProperties("questions")

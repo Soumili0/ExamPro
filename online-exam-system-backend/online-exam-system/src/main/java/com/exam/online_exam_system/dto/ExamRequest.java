@@ -1,5 +1,6 @@
 package com.exam.online_exam_system.dto;
 
+
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -13,4 +14,5 @@ public class ExamRequest {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Boolean published;
+    private Long createdBy;
 }

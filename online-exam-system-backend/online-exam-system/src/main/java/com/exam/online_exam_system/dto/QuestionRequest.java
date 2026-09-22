@@ -11,4 +11,5 @@ public class QuestionRequest {
     private String option4;
     private String correctAnswer;
     private Long examId;
+    private Long createdBy;
 }

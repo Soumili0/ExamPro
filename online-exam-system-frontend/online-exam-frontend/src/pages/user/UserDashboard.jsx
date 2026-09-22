@@ -101,7 +101,7 @@ export default function UserDashboard() {
   const aptitudeAvg   = avgOf(aptitudeHistory);
   const technicalAvg  = avgOf(technicalHistory);
   const interviewAvg  = interviewHistory.length
-    ? (interviewHistory.reduce((s, r) => s + (r.overallScore || 0), 0) / interviewHistory.length * 10).toFixed(1)
+    ? (interviewHistory.reduce((s, r) => s + (r.overallScore || 0), 0) / interviewHistory.length).toFixed(1)
     : null;
 
   const getBadge = (exam) => {

@@ -27,6 +27,7 @@ public class QuestionService {
         question.setOption3(request.getOption3());
         question.setOption4(request.getOption4());
         question.setCorrectAnswer(request.getCorrectAnswer());
+        question.setCreatedBy(request.getCreatedBy());
 
         if (request.getExamId() != null) {
             Exam exam = examRepository.findById(request.getExamId())
