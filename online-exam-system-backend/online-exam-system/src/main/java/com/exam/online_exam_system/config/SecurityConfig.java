@@ -57,7 +57,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                // সব endpoints open — JWT filter নিজেই authentication handle করবে
+                // All endpoints open — JWT filter handles authentication itself
                 .anyRequest().permitAll()
             )
             .sessionManagement(session ->
