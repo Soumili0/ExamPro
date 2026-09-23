@@ -1,6 +1,7 @@
 package com.exam.online_exam_system.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import org.springframework.stereotype.Component;
@@ -53,7 +54,11 @@ public String generateToken(String username, String role) {
 	}
 
 	public Boolean validateToken(String token, String username) {
-		final String extractedUsername = extractUsername(token);
-		return (extractedUsername.equals(username) && !isTokenExpired(token));
+		try {
+			final String extractedUsername = extractUsername(token);
+			return (extractedUsername.equals(username) && !isTokenExpired(token));
+		} catch (JwtException | IllegalArgumentException e) {
+			return false;
+		}
 	}
 }

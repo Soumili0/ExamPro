@@ -5,6 +5,7 @@ import com.exam.online_exam_system.dto.LoginResponse;
 import com.exam.online_exam_system.dto.RegisterRequest;
 import com.exam.online_exam_system.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,16 +17,15 @@ public class AuthController {
 
     // Register API
     @PostMapping("/register")
-    public String register(@RequestBody RegisterRequest request) {
-
-        return authService.register(request);
+    public ResponseEntity<String> register(@RequestBody RegisterRequest request) {
+        String result = authService.register(request);
+        return ResponseEntity.ok(result);
     }
 
     // Login API
     @PostMapping("/login")
-public LoginResponse login(
-        @RequestBody LoginRequest request) {
-
-    return authService.login(request);
-}
+    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+        LoginResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
+    }
 }
